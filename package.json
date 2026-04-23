@@ -1,0 +1,16 @@
+{
+  "name": "trading",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "dev": "corepack pnpm -r --parallel --stream dev",
+    "build": "corepack pnpm -r build",
+    "test": "corepack pnpm -r test"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
+  }
+}
