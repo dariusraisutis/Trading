@@ -4,6 +4,7 @@ import type { AppConfig } from "../config/env.js";
 import type { OrderRepository } from "../db/repositories/orders.js";
 import type { PositionRepository } from "../db/repositories/positions.js";
 import type { TradeRepository } from "../db/repositories/trades.js";
+import { buildExecutionAnalytics } from "../execution/analytics.js";
 
 export function createExecutionRouter(
   config: AppConfig,
@@ -39,6 +40,16 @@ export function createExecutionRouter(
     res.json({
       symbol,
       position: positionRepository.findBySymbol(symbol)
+    });
+  });
+
+  router.get("/analytics", (req, res) => {
+    const symbol = readSymbol(req.query.symbol, config.MARKET_SYMBOL);
+    const analytics = buildExecutionAnalytics(tradeRepository.listAll(symbol), config);
+
+    res.json({
+      symbol,
+      analytics
     });
   });
 

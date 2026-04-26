@@ -9,7 +9,7 @@ export class MarketDataStore {
       price: event.price,
       source: event.type,
       eventTime: event.eventTime,
-      receivedAt: new Date().toISOString()
+      receivedAt: new Date(event.eventTime).toISOString()
     };
 
     this.prices.set(event.symbol, snapshot);

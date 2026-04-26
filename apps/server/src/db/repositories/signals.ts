@@ -48,6 +48,11 @@ export function createSignalRepository(database: DatabaseConnection) {
     ORDER BY created_at DESC, id DESC
     LIMIT ?
   `);
+  const listByCandleId = database.prepare(`
+    SELECT * FROM signals
+    WHERE symbol = ? AND candle_id = ?
+    ORDER BY id ASC
+  `);
 
   return {
     create(signal: NewSignal): number | null {
@@ -60,6 +65,9 @@ export function createSignalRepository(database: DatabaseConnection) {
     },
     listRecent(symbol: string, limit = 100): Signal[] {
       return (listRecent.all(symbol, limit) as SignalRow[]).map(mapSignal);
+    },
+    listByCandleId(symbol: string, candleId: number): Signal[] {
+      return (listByCandleId.all(symbol, candleId) as SignalRow[]).map(mapSignal);
     }
   };
 }

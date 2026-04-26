@@ -12,5 +12,6 @@ export interface StrategySignal {
 
 export interface Strategy {
   name: string;
+  requiredCandles: number;
   evaluate(candles: Candle[]): StrategySignal | null;
 }

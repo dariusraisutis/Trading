@@ -1,8 +1,14 @@
 import { Router } from "express";
 
+import type { BotControlService } from "../bot/control-service.js";
 import type { AppConfig } from "../config/env.js";
+import type { ReplayService } from "../replay/service.js";
 
-export function createStatusRouter(config: AppConfig) {
+export function createStatusRouter(
+  config: AppConfig,
+  botControlService: BotControlService,
+  replayService?: ReplayService
+) {
   const router = Router();
 
   router.get("/", (_req, res) => {
@@ -15,8 +21,15 @@ export function createStatusRouter(config: AppConfig) {
       },
       market: {
         symbol: config.MARKET_SYMBOL,
-        enabled: config.MARKET_DATA_ENABLED
-      }
+        enabled: config.TRADING_MODE === "replay" ? false : config.MARKET_DATA_ENABLED
+      },
+      bot: botControlService.getState(),
+      strategies: botControlService.listStrategies(),
+      ...(replayService
+        ? {
+            replay: replayService.getState()
+          }
+        : {})
     });
   });
 

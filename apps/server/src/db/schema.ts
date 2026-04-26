@@ -33,6 +33,7 @@ const statements = [
     type TEXT NOT NULL,
     quantity REAL NOT NULL,
     price REAL,
+    exchange_order_id TEXT,
     status TEXT NOT NULL,
     mode TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -84,4 +85,20 @@ export function migrate(database: Database.Database) {
   database
     .prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_signals_strategy_candle ON signals(strategy, candle_id)")
     .run();
+  ensureColumn(database, "orders", "exchange_order_id", "TEXT");
+}
+
+function ensureColumn(
+  database: Database.Database,
+  table: string,
+  column: string,
+  definition: string
+) {
+  const columns = database.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+
+  if (columns.some((existing) => existing.name === column)) {
+    return;
+  }
+
+  database.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`).run();
 }

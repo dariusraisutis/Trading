@@ -2,6 +2,7 @@ import request from "supertest";
 import { describe, expect, it } from "vitest";
 
 import { createApp } from "../src/app.js";
+import { BotControlService } from "../src/bot/control-service.js";
 import { loadConfig } from "../src/config/env.js";
 import type { CandleRepository } from "../src/db/repositories/candles.js";
 import type { OrderRepository } from "../src/db/repositories/orders.js";
@@ -17,7 +18,8 @@ function buildApp() {
     TRADING_MODE: "paper",
     ENABLE_LIVE: "false",
     LOG_LEVEL: "silent",
-    MARKET_DATA_ENABLED: "false"
+    MARKET_DATA_ENABLED: "false",
+    REPLAY_AUTO_START: "false"
   });
   const logger = createLogger(config);
   const marketStore = new MarketDataStore();
@@ -84,6 +86,28 @@ function buildApp() {
         fee: 0.1,
         executedAt: "2026-04-23 00:00:00"
       }
+    ],
+    listAll: () => [
+      {
+        id: 1,
+        orderId: 1,
+        symbol: "BTCUSDT",
+        side: "buy",
+        quantity: 1,
+        price: 100,
+        fee: 0.1,
+        executedAt: "2026-04-23T00:00:00.000Z"
+      },
+      {
+        id: 2,
+        orderId: 2,
+        symbol: "BTCUSDT",
+        side: "sell",
+        quantity: 1,
+        price: 110,
+        fee: 0.11,
+        executedAt: "2026-04-23T00:05:00.000Z"
+      }
     ]
   } as TradeRepository;
   const positionRepository = {
@@ -94,8 +118,10 @@ function buildApp() {
       realizedPnl: -0.1
     })
   } as PositionRepository;
+  const botControlService = new BotControlService();
 
   return createApp(config, logger, {
+    botControlService,
     marketStore,
     candleRepository,
     signalRepository,
@@ -130,8 +156,48 @@ describe("server app", () => {
       market: {
         symbol: "BTCUSDT",
         enabled: false
-      }
+      },
+      bot: {
+        running: true,
+        activeStrategy: "all",
+        killSwitchActive: false,
+        killSwitchReason: null
+      },
+      strategies: ["all", "ma-crossover", "breakout", "mean-reversion", "caveman-trend-pullback"]
     });
+  });
+
+  it("supports bot control endpoints", async () => {
+    const app = buildApp();
+    const stop = await request(app).post("/api/v1/bot/stop");
+    const strategy = await request(app)
+      .post("/api/v1/bot/strategy")
+      .send({ strategy: "breakout" });
+    const state = await request(app).get("/api/v1/bot");
+
+    expect(stop.status).toBe(200);
+    expect(strategy.status).toBe(200);
+    expect(state.body).toEqual({
+      bot: {
+        running: false,
+        activeStrategy: "breakout",
+        killSwitchActive: false,
+        killSwitchReason: null
+      },
+      strategies: ["all", "ma-crossover", "breakout", "mean-reversion", "caveman-trend-pullback"]
+    });
+  });
+
+  it("responds to CORS preflight requests", async () => {
+    const response = await request(buildApp())
+      .options("/api/v1/bot/start")
+      .set("Origin", "http://localhost:5173")
+      .set("Access-Control-Request-Method", "POST");
+
+    expect(response.status).toBeGreaterThanOrEqual(200);
+    expect(response.status).toBeLessThan(300);
+    expect(response.headers["access-control-allow-origin"]).toBe("http://localhost:5173");
+    expect(response.headers["access-control-allow-methods"]).toContain("POST");
   });
 
   it("returns current market price", async () => {
@@ -221,6 +287,25 @@ describe("server app", () => {
       quantity: 1,
       averagePrice: 100,
       realizedPnl: -0.1
+    });
+  });
+
+  it("returns execution analytics", async () => {
+    const response = await request(buildApp()).get("/api/v1/execution/analytics");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      symbol: "BTCUSDT",
+      analytics: {
+        totalTrades: 2,
+        completedTrades: 1,
+        winningTrades: 1,
+        totalFees: 0.21,
+        grossPnl: 10,
+        netPnl: 9.79,
+        netReturnPct: 9.79,
+        averageRisk: 2
+      }
     });
   });
 

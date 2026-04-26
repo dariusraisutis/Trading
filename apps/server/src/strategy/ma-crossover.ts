@@ -4,6 +4,7 @@ import type { Strategy, StrategySignal } from "./types.js";
 export function createMaCrossoverStrategy(fastPeriod = 9, slowPeriod = 21): Strategy {
   return {
     name: "ma-crossover",
+    requiredCandles: slowPeriod + 1,
     evaluate(candles) {
       if (candles.length < slowPeriod + 1) {
         return null;
