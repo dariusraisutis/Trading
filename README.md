@@ -9,9 +9,10 @@ Local crypto trading bot monorepo built with Node.js and TypeScript.
 
 ## Current Status
 
-Phase 10 is implemented. The backend supports live paper trading and offline
-replay mode, includes a frozen validated strategy candidate from the ETH 4h
-research work, and now includes the Phase 11 live-trading execution path.
+Phases 0 through 12 are implemented. The backend supports paper, replay, and
+live execution paths, includes a frozen validated ETH 4h strategy candidate,
+and now includes Phase 12 stability hardening such as graceful shutdown,
+replay failure containment, reconnect cleanup, and startup state recovery.
 
 ## Commands
 
@@ -79,6 +80,14 @@ Live mode now uses a CCXT execution path that:
 - validates quantity precision and minimums against exchange market metadata
 - places market orders
 - stores exchange order IDs locally
+
+Phase 12 stability hardening adds:
+
+- graceful shutdown on `SIGINT` and `SIGTERM`
+- shutdown on `unhandledRejection` and `uncaughtException`
+- replay startup/runtime failure capture in replay state
+- startup recovery of last known price, latest trade metadata, and open position state
+- reconnect timer cleanup for the market WebSocket client
 
 ## Replay Mode
 
@@ -185,3 +194,5 @@ The caveman strategy also uses an ATR volatility filter to avoid dead markets.
 - [Frozen Champion Config](C:/Projects/Trading/Trading/docs/frozen-champion-config.md)
 - [Live Deployment Checklist](C:/Projects/Trading/Trading/docs/live-deployment-checklist.md)
 - [Final Strategy Report](C:/Projects/Trading/Trading/docs/final-strategy-report.md)
+
+There are also separate experimental intraday modules in [apps/server/src/backtest/scalping.ts](C:/Projects/Trading/Trading/apps/server/src/backtest/scalping.ts) and [apps/server/src/backtest/scalp-breakout.ts](C:/Projects/Trading/Trading/apps/server/src/backtest/scalp-breakout.ts). They are intentionally separate from the ETH 4h champion and are used for faster research tracks such as `5m`/`15m` pullback and breakout testing against genuine `ETHUSDT` lower-timeframe CSV data.

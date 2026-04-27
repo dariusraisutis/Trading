@@ -10,6 +10,7 @@ import { CandleService } from "./market/candle-service.js";
 import { ExchangeWebSocketClient } from "./market/exchange-websocket-client.js";
 import { MarketDataStore } from "./market/store.js";
 import { ReplayService } from "./replay/service.js";
+import { recoverRuntimeState } from "./runtime-state.js";
 import { StrategyService } from "./strategy/service.js";
 
 async function main() {
@@ -76,14 +77,61 @@ async function main() {
     positionRepository: repositories.positions,
     replayService
   });
+  const recoveredState = recoverRuntimeState(config.MARKET_SYMBOL, {
+    candleRepository: repositories.candles,
+    tradeRepository: repositories.trades,
+    positionRepository: repositories.positions,
+    marketStore,
+    logger
+  });
+  let shuttingDown = false;
+  let httpServer: ReturnType<typeof app.listen> | null = null;
 
-  process.on("SIGINT", () => {
-    logger.info("Closing market data and database connections");
+  const shutdown = (reason: string, exitCode = 0, error?: unknown) => {
+    if (shuttingDown) {
+      return;
+    }
+
+    shuttingDown = true;
+
+    if (error) {
+      logger.error({ err: error, reason }, "Server shutting down after runtime failure");
+    } else {
+      logger.info({ reason }, "Server shutting down gracefully");
+    }
+
+    replayService.stop();
     marketClient.stop();
     candleService.stop();
-    database.close();
-    process.exit(0);
-  });
+    let finalized = false;
+
+    const finish = () => {
+      if (finalized) {
+        return;
+      }
+
+      finalized = true;
+
+      try {
+        database.close();
+      } finally {
+        process.exit(exitCode);
+      }
+    };
+
+    if (httpServer) {
+      httpServer.close(() => finish());
+      setTimeout(() => finish(), 5_000).unref();
+      return;
+    }
+
+    finish();
+  };
+
+  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("unhandledRejection", (error) => shutdown("unhandledRejection", 1, error));
+  process.on("uncaughtException", (error) => shutdown("uncaughtException", 1, error));
 
   candleService.start();
 
@@ -102,9 +150,14 @@ async function main() {
     logger.info("Market data WebSocket startup disabled");
   }
 
-  app.listen(config.PORT, () => {
+  httpServer = app.listen(config.PORT, () => {
     logger.info(
-      { port: config.PORT, dbPath: config.DB_PATH, symbol: config.MARKET_SYMBOL },
+      {
+        port: config.PORT,
+        dbPath: config.DB_PATH,
+        symbol: config.MARKET_SYMBOL,
+        recoveredRuntimeState: recoveredState
+      },
       "Server listening"
     );
   });

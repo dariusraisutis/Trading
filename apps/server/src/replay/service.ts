@@ -59,32 +59,40 @@ export class ReplayService {
       return this.getState();
     }
 
-    if (!this.state.loaded) {
-      this.load();
-    }
-
-    if (this.state.running || this.state.completed) {
-      return this.getState();
-    }
-
-    this.state.running = true;
-
-    if (this.state.totalCandles === 0) {
-      this.finish();
-      return this.getState();
-    }
-
-    if (this.config.REPLAY_INTERVAL_MS === 0) {
-      while (this.state.running && this.cursor < this.candles.length) {
-        this.processNext();
+    try {
+      if (!this.state.loaded) {
+        this.load();
       }
 
-      return this.getState();
-    }
+      if (!this.state.loaded || this.state.lastError) {
+        return this.getState();
+      }
 
-    this.timer = setInterval(() => {
-      this.processNext();
-    }, this.config.REPLAY_INTERVAL_MS);
+      if (this.state.running || this.state.completed) {
+        return this.getState();
+      }
+
+      this.state.running = true;
+
+      if (this.state.totalCandles === 0) {
+        this.finish();
+        return this.getState();
+      }
+
+      if (this.config.REPLAY_INTERVAL_MS === 0) {
+        while (this.state.running && this.cursor < this.candles.length) {
+          this.processNext();
+        }
+
+        return this.getState();
+      }
+
+      this.timer = setInterval(() => {
+        this.processNext();
+      }, this.config.REPLAY_INTERVAL_MS);
+    } catch (error) {
+      this.fail(error);
+    }
 
     return this.getState();
   }
@@ -100,27 +108,31 @@ export class ReplayService {
   }
 
   load(): ReplayState {
-    const csvPath = resolve(this.config.REPLAY_CSV_PATH);
-    const content = readFileSync(csvPath, "utf8");
+    try {
+      const csvPath = resolve(this.config.REPLAY_CSV_PATH);
+      const content = readFileSync(csvPath, "utf8");
 
-    this.candles = parseReplayCsv(content, this.config.MARKET_SYMBOL);
-    this.cursor = 0;
-    this.state = {
-      ...this.state,
-      csvPath,
-      loaded: true,
-      running: false,
-      completed: false,
-      processedCandles: 0,
-      totalCandles: this.candles.length,
-      currentOpenTime: null,
-      lastError: null
-    };
+      this.candles = parseReplayCsv(content, this.config.MARKET_SYMBOL);
+      this.cursor = 0;
+      this.state = {
+        ...this.state,
+        csvPath,
+        loaded: true,
+        running: false,
+        completed: false,
+        processedCandles: 0,
+        totalCandles: this.candles.length,
+        currentOpenTime: null,
+        lastError: null
+      };
 
-    this.logger.info(
-      { csvPath, candles: this.candles.length, symbol: this.config.MARKET_SYMBOL },
-      "Replay CSV loaded"
-    );
+      this.logger.info(
+        { csvPath, candles: this.candles.length, symbol: this.config.MARKET_SYMBOL },
+        "Replay CSV loaded"
+      );
+    } catch (error) {
+      this.fail(error);
+    }
 
     return this.getState();
   }
@@ -130,41 +142,45 @@ export class ReplayService {
       return;
     }
 
-    const candle = this.candles[this.cursor];
+    try {
+      const candle = this.candles[this.cursor];
 
-    if (!candle) {
-      this.finish();
-      return;
-    }
+      if (!candle) {
+        this.finish();
+        return;
+      }
 
-    const saved = this.candleRepository.create(candle);
+      const saved = this.candleRepository.create(candle);
 
-    this.marketStore.update({
-      type: "ticker",
-      symbol: saved.symbol,
-      price: saved.close,
-      eventTime: saved.closeTime
-    });
-    this.onCandleClosed?.(saved);
-    this.strategyService.evaluateClosedCandle(saved);
+      this.marketStore.update({
+        type: "ticker",
+        symbol: saved.symbol,
+        price: saved.close,
+        eventTime: saved.closeTime
+      });
+      this.onCandleClosed?.(saved);
+      this.strategyService.evaluateClosedCandle(saved);
 
-    this.cursor += 1;
-    this.state.processedCandles = this.cursor;
-    this.state.currentOpenTime = saved.openTime;
+      this.cursor += 1;
+      this.state.processedCandles = this.cursor;
+      this.state.currentOpenTime = saved.openTime;
 
-    this.logger.info(
-      {
-        replay: {
-          processedCandles: this.state.processedCandles,
-          totalCandles: this.state.totalCandles
+      this.logger.info(
+        {
+          replay: {
+            processedCandles: this.state.processedCandles,
+            totalCandles: this.state.totalCandles
+          },
+          candle: saved
         },
-        candle: saved
-      },
-      "Replay candle processed"
-    );
+        "Replay candle processed"
+      );
 
-    if (this.cursor >= this.candles.length) {
-      this.finish();
+      if (this.cursor >= this.candles.length) {
+        this.finish();
+      }
+    } catch (error) {
+      this.fail(error);
     }
   }
 
@@ -176,6 +192,18 @@ export class ReplayService {
 
     this.state.running = false;
     this.state.completed = true;
+  }
+
+  private fail(error: unknown) {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+
+    this.state.running = false;
+    this.state.completed = false;
+    this.state.lastError = error instanceof Error ? error.message : String(error);
+    this.logger.error({ err: error }, "Replay service failed");
   }
 }
 

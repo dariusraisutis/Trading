@@ -52,6 +52,11 @@ export class ExchangeWebSocketClient {
   }
 
   private connect() {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
     const SocketFactory = (this.options.webSocketFactory ??
       globalThis.WebSocket) as WebSocketConstructor | undefined;
 
@@ -64,6 +69,7 @@ export class ExchangeWebSocketClient {
     this.socket = socket;
 
     socket.onopen = () => {
+      this.reconnectTimer = null;
       const symbol = this.options.config.MARKET_SYMBOL.toLowerCase();
       socket.send(
         JSON.stringify({

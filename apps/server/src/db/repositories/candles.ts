@@ -75,6 +75,12 @@ export function createCandleRepository(database: DatabaseConnection) {
     ORDER BY open_time DESC
     LIMIT ?
   `);
+  const findLatestBySymbol = database.prepare(`
+    SELECT * FROM candles
+    WHERE symbol = ?
+    ORDER BY open_time DESC, id DESC
+    LIMIT 1
+  `);
 
   return {
     create(candle: NewCandle): Candle {
@@ -108,6 +114,10 @@ export function createCandleRepository(database: DatabaseConnection) {
       return (listBeforeOrAt.all(symbol, timeframe, openTime, limit) as CandleRow[])
         .map(mapCandle)
         .reverse();
+    },
+    findLatestBySymbol(symbol: string): Candle | null {
+      const row = findLatestBySymbol.get(symbol) as CandleRow | undefined;
+      return row ? mapCandle(row) : null;
     }
   };
 }

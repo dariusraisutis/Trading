@@ -260,4 +260,50 @@ describe("replay mode", () => {
       })
     ]);
   });
+
+  it("captures replay startup errors without crashing process state", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "trading-replay-missing-"));
+    const dbPath = join(tempDir, "trading.sqlite");
+    const csvPath = join(tempDir, "missing.csv");
+    const config = loadConfig({
+      PORT: "3001",
+      TRADING_MODE: "replay",
+      ENABLE_LIVE: "false",
+      LOG_LEVEL: "silent",
+      DB_PATH: dbPath,
+      MARKET_SYMBOL: "BTCUSDT",
+      MARKET_DATA_ENABLED: "false",
+      REPLAY_CSV_PATH: csvPath,
+      REPLAY_INTERVAL_MS: "0",
+      REPLAY_AUTO_START: "false"
+    });
+    const logger = createLogger(config);
+    const database = openDatabase(config);
+    const repositories = createRepositories(database);
+    const marketStore = new MarketDataStore();
+    const botControlService = new BotControlService();
+    const strategyService = new StrategyService(
+      repositories.candles,
+      repositories.signals,
+      logger,
+      undefined,
+      botControlService
+    );
+    const replayService = new ReplayService(
+      config,
+      logger,
+      marketStore,
+      repositories.candles,
+      strategyService
+    );
+
+    const state = replayService.start();
+
+    expect(state.loaded).toBe(false);
+    expect(state.running).toBe(false);
+    expect(state.completed).toBe(false);
+    expect(state.lastError).toContain("ENOENT");
+
+    database.close();
+  });
 });
