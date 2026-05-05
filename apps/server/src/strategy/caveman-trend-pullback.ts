@@ -11,6 +11,7 @@ export function createCavemanTrendPullbackStrategy(
 ): Strategy {
   return {
     name: "caveman-trend-pullback",
+    timeframe: "1m",
     requiredCandles: Math.max(emaPeriod, rsiPeriod + 1),
     evaluate(candles) {
       const minimumCandles = Math.max(emaPeriod, rsiPeriod + 1);

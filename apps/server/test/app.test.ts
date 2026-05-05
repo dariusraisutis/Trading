@@ -163,7 +163,14 @@ describe("server app", () => {
         killSwitchActive: false,
         killSwitchReason: null
       },
-      strategies: ["all", "ma-crossover", "breakout", "mean-reversion", "caveman-trend-pullback"]
+      strategies: [
+        "all",
+        "ma-crossover",
+        "breakout",
+        "mean-reversion",
+        "caveman-trend-pullback",
+        "momentum-champion"
+      ]
     });
   });
 
@@ -184,7 +191,14 @@ describe("server app", () => {
         killSwitchActive: false,
         killSwitchReason: null
       },
-      strategies: ["all", "ma-crossover", "breakout", "mean-reversion", "caveman-trend-pullback"]
+      strategies: [
+        "all",
+        "ma-crossover",
+        "breakout",
+        "mean-reversion",
+        "caveman-trend-pullback",
+        "momentum-champion"
+      ]
     });
   });
 

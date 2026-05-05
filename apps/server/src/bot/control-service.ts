@@ -1,4 +1,11 @@
-const STRATEGIES = ["all", "ma-crossover", "breakout", "mean-reversion", "caveman-trend-pullback"] as const;
+const STRATEGIES = [
+  "all",
+  "ma-crossover",
+  "breakout",
+  "mean-reversion",
+  "caveman-trend-pullback",
+  "momentum-champion"
+] as const;
 
 export type BotStrategy = (typeof STRATEGIES)[number];
 

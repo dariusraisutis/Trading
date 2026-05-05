@@ -4,6 +4,7 @@ import type { BotControlService } from "../bot/control-service.js";
 import type { AppConfig } from "../config/env.js";
 import type { Candle } from "../db/repositories/candles.js";
 import type { OrderRepository } from "../db/repositories/orders.js";
+import type { PositionControl, PositionControlRepository } from "../db/repositories/position-controls.js";
 import type { Position, PositionRepository } from "../db/repositories/positions.js";
 import type { TradeRepository } from "../db/repositories/trades.js";
 import type { MarketDataStore } from "../market/store.js";
@@ -33,6 +34,7 @@ export class PaperTradingService {
     private readonly marketStore: MarketDataStore,
     private readonly orderRepository: OrderRepository,
     private readonly tradeRepository: TradeRepository,
+    private readonly positionControlRepository: PositionControlRepository,
     private readonly positionRepository: PositionRepository,
     private readonly logger: pino.Logger,
     private readonly botControlService?: BotControlService
@@ -115,6 +117,7 @@ export class PaperTradingService {
     );
 
     this.positionRepository.upsert(updatedPosition);
+    this.updatePositionControlAfterSignal(signal, executionPrice, updatedPosition);
     this.applyKillSwitchIfNeeded(signal.symbol);
     this.logger.info(
       {
@@ -127,12 +130,21 @@ export class PaperTradingService {
     );
   }
 
-  handleProtectiveExit(candle: Pick<Candle, "symbol" | "open" | "high" | "low" | "closeTime">) {
+  handleProtectiveExit(candle: Pick<Candle, "symbol" | "timeframe" | "open" | "high" | "low" | "closeTime">) {
     if (this.config.TRADING_MODE === "live") {
       return;
     }
 
     const currentPosition = this.positionRepository.findBySymbol(candle.symbol);
+    const control = this.positionControlRepository.findBySymbol(candle.symbol);
+
+    if (control && currentPosition && currentPosition.quantity > 0) {
+      if (candle.timeframe === control.timeframe) {
+        this.handleChampionProtectiveExit(candle, currentPosition, control);
+      }
+      return;
+    }
+
     const decision = this.riskService.evaluateProtectiveExit(currentPosition, candle);
 
     if (!decision.shouldExit || !decision.side || !decision.quantity || !decision.price || !currentPosition) {
@@ -289,6 +301,146 @@ export class PaperTradingService {
 
     return maxDrawdownPct;
   }
+
+  private updatePositionControlAfterSignal(
+    signal: StrategySignal,
+    executionPrice: number,
+    updatedPosition: Position
+  ) {
+    if (signal.strategy !== "momentum-champion") {
+      return;
+    }
+
+    if (updatedPosition.quantity <= 0) {
+      this.positionControlRepository.removeBySymbol(signal.symbol);
+      return;
+    }
+
+    if (signal.side !== "buy" || signal.intent === "close") {
+      return;
+    }
+
+    const stopDistance = signal.tradePlan?.stopDistance ?? 0;
+    const partialExitFraction = signal.tradePlan?.partialExitFraction ?? 0;
+    const partialExitAtR = signal.tradePlan?.partialExitAtR ?? 0;
+
+    this.positionControlRepository.upsert({
+      symbol: signal.symbol,
+      strategy: signal.strategy,
+      timeframe: signal.tradePlan?.timeframe ?? "4h",
+      stopPrice: stopDistance > 0 ? roundToPrice(executionPrice - stopDistance) : null,
+      partialTargetPrice:
+        stopDistance > 0 && partialExitFraction > 0 && partialExitAtR > 0
+          ? roundToPrice(executionPrice + stopDistance * partialExitAtR)
+          : null,
+      partialExitFraction,
+      partialExitTaken: false
+    });
+  }
+
+  private handleChampionProtectiveExit(
+    candle: Pick<Candle, "symbol" | "timeframe" | "open" | "high" | "low" | "closeTime">,
+    currentPosition: Position,
+    control: PositionControl
+  ) {
+    let position = currentPosition;
+    let latestControl = control;
+
+    if (
+      !latestControl.partialExitTaken &&
+      latestControl.partialTargetPrice !== null &&
+      latestControl.partialExitFraction > 0
+    ) {
+      const partialExitPrice = resolveLongLimitLikeExitPrice(
+        candle.open,
+        candle.high,
+        latestControl.partialTargetPrice
+      );
+
+      if (partialExitPrice !== null) {
+        const partialQuantity = roundToQuantity(position.quantity * latestControl.partialExitFraction);
+
+        if (partialQuantity > 0 && partialQuantity < position.quantity) {
+          position = this.executePaperExit(
+            candle.symbol,
+            "sell",
+            partialQuantity,
+            partialExitPrice,
+            new Date(candle.closeTime).toISOString(),
+            position,
+            "Champion partial exit executed"
+          );
+          latestControl = {
+            ...latestControl,
+            partialExitTaken: true
+          };
+          this.positionControlRepository.upsert(latestControl);
+        }
+      }
+    }
+
+    if (latestControl.stopPrice === null) {
+      return;
+    }
+
+    const stopExitPrice = resolveLongStopExitPrice(candle.open, candle.low, latestControl.stopPrice);
+
+    if (stopExitPrice === null) {
+      return;
+    }
+
+    const updatedPosition = this.executePaperExit(
+      candle.symbol,
+      "sell",
+      position.quantity,
+      stopExitPrice,
+      new Date(candle.closeTime).toISOString(),
+      position,
+      "Champion stop exit executed"
+    );
+
+    if (updatedPosition.quantity <= 0) {
+      this.positionControlRepository.removeBySymbol(candle.symbol);
+    }
+  }
+
+  private executePaperExit(
+    symbol: string,
+    side: "buy" | "sell",
+    quantity: number,
+    rawPrice: number,
+    executedAt: string,
+    currentPosition: Position,
+    logMessage: string
+  ) {
+    const executionPrice = applySlippage(side, rawPrice, this.config.SLIPPAGE_PCT);
+    const fee = executionPrice * quantity * this.config.PAPER_FEE_RATE;
+    const orderId = this.orderRepository.create({
+      symbol,
+      side,
+      type: "market",
+      quantity,
+      price: executionPrice,
+      status: "filled",
+      mode: this.config.TRADING_MODE
+    });
+    const tradeId = this.tradeRepository.create({
+      orderId,
+      symbol,
+      side,
+      quantity,
+      price: executionPrice,
+      fee,
+      executedAt
+    });
+    const updatedPosition = applyPaperFill(currentPosition, side, quantity, executionPrice, fee);
+
+    this.positionRepository.upsert(updatedPosition);
+    this.applyKillSwitchIfNeeded(symbol);
+    this.logger.info({ symbol, orderId, tradeId, position: updatedPosition }, logMessage);
+
+    return updatedPosition;
+  }
 }
 
 export function applyPaperFill(
@@ -360,6 +512,10 @@ function roundToCents(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+function roundToQuantity(value: number) {
+  return Math.round(value * 1_000_000) / 1_000_000;
+}
+
 function applySlippage(side: "buy" | "sell", price: number, slippagePct: number) {
   if (side === "buy") {
     return roundToPrice(price * (1 + slippagePct));
@@ -370,4 +526,28 @@ function applySlippage(side: "buy" | "sell", price: number, slippagePct: number)
 
 function roundToPrice(value: number) {
   return Math.round(value * 1_000_000) / 1_000_000;
+}
+
+function resolveLongLimitLikeExitPrice(open: number, high: number, targetPrice: number) {
+  if (open >= targetPrice) {
+    return open;
+  }
+
+  if (high >= targetPrice) {
+    return targetPrice;
+  }
+
+  return null;
+}
+
+function resolveLongStopExitPrice(open: number, low: number, stopPrice: number) {
+  if (open <= stopPrice) {
+    return open;
+  }
+
+  if (low <= stopPrice) {
+    return stopPrice;
+  }
+
+  return null;
 }

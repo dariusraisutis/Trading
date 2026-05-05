@@ -4,6 +4,7 @@ import type { Strategy, StrategySignal } from "./types.js";
 export function createMeanReversionStrategy(period = 20, threshold = 2): Strategy {
   return {
     name: "mean-reversion",
+    timeframe: "1m",
     requiredCandles: period,
     evaluate(candles) {
       if (candles.length < period) {

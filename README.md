@@ -127,6 +127,48 @@ already processed candles.
 - API health check: `http://localhost:3001/health`
 - Web app: `http://localhost:5173`
 
+## Champion Paper Trading
+
+The validated ETH swing hunter can now be paper-traded through the runtime bot as
+`momentum-champion`.
+
+Recommended `.env` values:
+
+```bash
+TRADING_MODE=paper
+ENABLE_LIVE=false
+MARKET_SYMBOL=ETHUSDT
+MARKET_DATA_ENABLED=true
+PAPER_ACCOUNT_SIZE=1000
+RISK_PER_TRADE_PCT=0.005
+```
+
+How to start:
+
+```bash
+corepack pnpm install
+corepack pnpm dev
+```
+
+Then open `http://localhost:5173`, start the bot if needed, and select
+`Momentum Champion` in the strategy dropdown.
+
+What runtime champion currently does:
+
+- builds live `1m` and `4h` candles from Binance trade flow
+- evaluates only on `4h` candles
+- enters long when 4h momentum is above the `60`-candle reference and price is above `EMA200`
+- requires `ATR14 / price >= 1%`
+- sets an internal paper stop at `2 x ATR`
+- takes `50%` off at `1.25R`
+- closes the runner on a momentum-flip sell signal
+
+Important note:
+
+- this is still paper execution against live Binance market data
+- no Binance API key is needed for paper mode
+- no real exchange order is placed unless `TRADING_MODE=live` and `ENABLE_LIVE=true`
+
 ## API Routes
 
 - `GET /health`

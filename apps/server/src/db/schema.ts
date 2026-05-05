@@ -57,6 +57,16 @@ const statements = [
     average_price REAL NOT NULL,
     realized_pnl REAL NOT NULL DEFAULT 0,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS position_controls (
+    symbol TEXT NOT NULL PRIMARY KEY,
+    strategy TEXT NOT NULL,
+    timeframe TEXT NOT NULL,
+    stop_price REAL,
+    partial_target_price REAL,
+    partial_exit_fraction REAL NOT NULL DEFAULT 0,
+    partial_exit_taken INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`
 ];
 
@@ -64,7 +74,8 @@ const indexes = [
   "CREATE INDEX IF NOT EXISTS idx_candles_symbol_time ON candles(symbol, timeframe, open_time)",
   "CREATE INDEX IF NOT EXISTS idx_signals_symbol_strategy ON signals(symbol, strategy, created_at)",
   "CREATE INDEX IF NOT EXISTS idx_orders_symbol_status ON orders(symbol, status)",
-  "CREATE INDEX IF NOT EXISTS idx_trades_symbol_time ON trades(symbol, executed_at)"
+  "CREATE INDEX IF NOT EXISTS idx_trades_symbol_time ON trades(symbol, executed_at)",
+  "CREATE INDEX IF NOT EXISTS idx_position_controls_strategy ON position_controls(strategy, timeframe)"
 ];
 
 export function migrate(database: Database.Database) {

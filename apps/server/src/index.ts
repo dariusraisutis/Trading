@@ -37,6 +37,7 @@ async function main() {
           marketStore,
           repositories.orders,
           repositories.trades,
+          repositories.positionControls,
           repositories.positions,
           logger,
           botControlService

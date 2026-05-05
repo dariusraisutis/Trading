@@ -47,6 +47,7 @@ export class RiskService {
     context: EntryRiskContext
   ): RiskDecision {
     const hasPosition = position !== null && position.quantity !== 0;
+    const intent = signal.intent ?? "both";
     const quantity = hasPosition
       ? Math.abs(position.quantity)
       : this.calculateEntryQuantity(price.price, context.accountBalance);
@@ -68,6 +69,14 @@ export class RiskService {
         allowed: false,
         quantity: 0,
         reason: "account depleted"
+      };
+    }
+
+    if (!hasPosition && intent === "close") {
+      return {
+        allowed: false,
+        quantity: 0,
+        reason: "no position to close"
       };
     }
 

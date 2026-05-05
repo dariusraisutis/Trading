@@ -74,6 +74,11 @@ describe("paper trading", () => {
       findMostRecent: vi.fn(() => null),
       listAll: vi.fn(() => [])
     };
+    const positionControlRepository = {
+      findBySymbol: vi.fn(() => null),
+      upsert: vi.fn(),
+      removeBySymbol: vi.fn()
+    };
     const positionRepository = {
       findBySymbol: vi.fn(() => null),
       upsert: vi.fn()
@@ -83,6 +88,7 @@ describe("paper trading", () => {
       marketStore,
       orderRepository as never,
       tradeRepositoryWithLookup as never,
+      positionControlRepository as never,
       positionRepository as never,
       createLogger(config)
     );
@@ -141,6 +147,11 @@ describe("paper trading", () => {
       findMostRecent: vi.fn(() => null),
       listAll: vi.fn(() => [])
     };
+    const positionControlRepository = {
+      findBySymbol: vi.fn(() => null),
+      upsert: vi.fn(),
+      removeBySymbol: vi.fn()
+    };
     const positionRepository = {
       findBySymbol: vi.fn(() => ({
         symbol: "BTCUSDT",
@@ -155,6 +166,7 @@ describe("paper trading", () => {
       marketStore,
       orderRepository as never,
       tradeRepository as never,
+      positionControlRepository as never,
       positionRepository as never,
       createLogger(config)
     );
@@ -249,6 +261,11 @@ describe("paper trading", () => {
         }
       ])
     };
+    const positionControlRepository = {
+      findBySymbol: vi.fn(() => null),
+      upsert: vi.fn(),
+      removeBySymbol: vi.fn()
+    };
     const positionRepository = {
       findBySymbol: vi.fn(() => null),
       upsert: vi.fn()
@@ -258,6 +275,7 @@ describe("paper trading", () => {
       marketStore,
       orderRepository as never,
       tradeRepository as never,
+      positionControlRepository as never,
       positionRepository as never,
       createLogger(config)
     );
@@ -351,6 +369,11 @@ describe("paper trading", () => {
         }
       ])
     };
+    const positionControlRepository = {
+      findBySymbol: vi.fn(() => null),
+      upsert: vi.fn(),
+      removeBySymbol: vi.fn()
+    };
     const positionRepository = {
       findBySymbol: vi.fn(() => null),
       upsert: vi.fn()
@@ -360,6 +383,7 @@ describe("paper trading", () => {
       marketStore,
       orderRepository as never,
       tradeRepository as never,
+      positionControlRepository as never,
       positionRepository as never,
       createLogger(config)
     );
@@ -384,6 +408,11 @@ describe("paper trading", () => {
       findMostRecent: vi.fn(() => null),
       listAll: vi.fn(() => [])
     };
+    const positionControlRepository = {
+      findBySymbol: vi.fn(() => null),
+      upsert: vi.fn(),
+      removeBySymbol: vi.fn()
+    };
     const positionRepository = {
       findBySymbol: vi.fn(() => ({
         symbol: "BTCUSDT",
@@ -398,12 +427,14 @@ describe("paper trading", () => {
       marketStore,
       orderRepository as never,
       tradeRepository as never,
+      positionControlRepository as never,
       positionRepository as never,
       createLogger(config)
     );
 
     service.handleProtectiveExit({
       symbol: "BTCUSDT",
+      timeframe: "1m",
       open: 100,
       high: 101,
       low: 97,
@@ -510,6 +541,11 @@ describe("paper trading", () => {
           }
         ])
     };
+    const positionControlRepository = {
+      findBySymbol: vi.fn(() => null),
+      upsert: vi.fn(),
+      removeBySymbol: vi.fn()
+    };
     const positionRepository = {
       findBySymbol: vi.fn(() => null),
       upsert: vi.fn()
@@ -523,6 +559,7 @@ describe("paper trading", () => {
       marketStore,
       orderRepository as never,
       tradeRepository as never,
+      positionControlRepository as never,
       positionRepository as never,
       createLogger(config),
       botControlService

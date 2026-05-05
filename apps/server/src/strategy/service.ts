@@ -7,6 +7,7 @@ import { createBreakoutStrategy } from "./breakout.js";
 import { createCavemanTrendPullbackStrategy } from "./caveman-trend-pullback.js";
 import { createMaCrossoverStrategy } from "./ma-crossover.js";
 import { createMeanReversionStrategy } from "./mean-reversion.js";
+import { createMomentumChampionStrategy } from "./momentum-champion.js";
 import type { Strategy } from "./types.js";
 
 export class StrategyService {
@@ -18,7 +19,8 @@ export class StrategyService {
       createMaCrossoverStrategy(),
       createBreakoutStrategy(),
       createMeanReversionStrategy(),
-      createCavemanTrendPullbackStrategy()
+      createCavemanTrendPullbackStrategy(),
+      createMomentumChampionStrategy()
     ],
     private readonly botControlService?: BotControlService,
     private readonly onSignalCreated?: (signal: {
@@ -31,13 +33,7 @@ export class StrategyService {
   ) {}
 
   evaluateClosedCandle(candle: Candle) {
-    const lookback = Math.max(...this.strategies.map((strategy) => strategy.requiredCandles), 50);
-    const candles = this.candleRepository.listBeforeOrAt(
-      candle.symbol,
-      candle.timeframe,
-      candle.openTime,
-      lookback
-    );
+    const candleCache = new Map<string, Candle[]>();
     const existingSignals = this.signalRepository.listByCandleId(candle.symbol, candle.id);
     const existingDirectionalSignal = existingSignals.find(
       (signal): signal is typeof signal & { side: "buy" | "sell" } =>
@@ -46,8 +42,25 @@ export class StrategyService {
     let acceptedSide: "buy" | "sell" | null = existingDirectionalSignal?.side ?? null;
 
     for (const strategy of this.strategies) {
+      if (strategy.timeframe !== candle.timeframe) {
+        continue;
+      }
+
       if (this.botControlService && !this.botControlService.allowsStrategy(strategy.name)) {
         continue;
+      }
+
+      let candles = candleCache.get(strategy.timeframe);
+
+      if (!candles) {
+        const lookback = Math.max(strategy.requiredCandles, 50);
+        candles = this.candleRepository.listBeforeOrAt(
+          candle.symbol,
+          strategy.timeframe,
+          candle.openTime,
+          lookback
+        );
+        candleCache.set(strategy.timeframe, candles);
       }
 
       const signal = strategy.evaluate(candles);

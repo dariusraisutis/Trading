@@ -7,16 +7,17 @@ import {
   createCavemanTrendPullbackStrategy,
   createMaCrossoverStrategy,
   createMeanReversionStrategy,
+  createMomentumChampionStrategy,
   StrategyService
 } from "../src/strategy/index.js";
 
-function makeCandles(closes: number[]): Candle[] {
+function makeCandles(closes: number[], timeframe = "1m", startTime = 0, intervalMs = 60_000): Candle[] {
   return closes.map((close, index) => ({
     id: index + 1,
     symbol: "BTCUSDT",
-    timeframe: "1m",
-    openTime: index * 60_000,
-    closeTime: index * 60_000 + 59_999,
+    timeframe,
+    openTime: startTime + index * intervalMs,
+    closeTime: startTime + (index + 1) * intervalMs - 1,
     open: close,
     high: close,
     low: close,
@@ -79,6 +80,46 @@ describe("strategies", () => {
       strategy: "caveman-trend-pullback",
       side: "sell",
       candleId: 7
+    });
+  });
+
+  it("generates champion momentum entry and close-only exit signals on 4h candles", () => {
+    const strategy = createMomentumChampionStrategy();
+    const rising = makeCandles(
+      Array.from({ length: 220 }, (_, index) => 100 + index),
+      "4h",
+      0,
+      4 * 60 * 60_000
+    ).map((candle, index) => ({
+      ...candle,
+      high: candle.close + 5,
+      low: candle.close - 5
+    }));
+    const entry = strategy.evaluate(rising);
+    const flipped = rising.map((candle, index) =>
+      index === rising.length - 1
+        ? {
+            ...candle,
+            close: rising[rising.length - 61].close - 10,
+            high: rising[rising.length - 61].close - 5,
+            low: rising[rising.length - 61].close - 15
+          }
+        : candle
+    );
+    const exit = strategy.evaluate(flipped);
+
+    expect(entry).toMatchObject({
+      strategy: "momentum-champion",
+      side: "buy",
+      intent: "open",
+      candleId: rising.length
+    });
+    expect(entry?.tradePlan?.timeframe).toBe("4h");
+    expect(exit).toMatchObject({
+      strategy: "momentum-champion",
+      side: "sell",
+      intent: "close",
+      candleId: rising.length
     });
   });
 
@@ -157,6 +198,7 @@ describe("strategies", () => {
       [
         {
           name: "first",
+          timeframe: "1m",
           requiredCandles: 1,
           evaluate: () => ({
             strategy: "first",
@@ -168,6 +210,7 @@ describe("strategies", () => {
         },
         {
           name: "second",
+          timeframe: "1m",
           requiredCandles: 1,
           evaluate: () => ({
             strategy: "second",

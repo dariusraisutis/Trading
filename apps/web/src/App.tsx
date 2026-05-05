@@ -11,7 +11,13 @@ import {
   YAxis
 } from "recharts";
 
-type BotStrategy = "all" | "ma-crossover" | "breakout" | "mean-reversion" | "caveman-trend-pullback";
+type BotStrategy =
+  | "all"
+  | "ma-crossover"
+  | "breakout"
+  | "mean-reversion"
+  | "caveman-trend-pullback"
+  | "momentum-champion";
 
 interface ReplayState {
   csvPath: string | null;
@@ -188,6 +194,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const isReplayMode = data.status?.mode === "replay";
+  const activeTimeframe = preferredTimeframeForStrategy(data.status?.bot.activeStrategy);
 
   useEffect(() => {
     let cancelled = false;
@@ -244,7 +251,9 @@ export function App() {
 
     async function loadCandles() {
       try {
-        const candles = await fetchJson<CandlesResponse>("/api/v1/market/candles?limit=20");
+        const candles = await fetchJson<CandlesResponse>(
+          `/api/v1/market/candles?limit=20&timeframe=${activeTimeframe}`
+        );
 
         if (cancelled) {
           return;
@@ -273,13 +282,13 @@ export function App() {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [isReplayMode]);
+  }, [activeTimeframe, isReplayMode]);
 
   const deferredCandles = useDeferredValue(data.candles?.candles ?? []);
   const chartData = useMemo(() => {
     const candles = [...deferredCandles].reverse();
     return candles.map((candle) => ({
-      time: formatTime(candle.openTime),
+      time: formatChartTime(candle.openTime, candle.timeframe),
       open: candle.open,
       close: candle.close,
       high: candle.high,
@@ -338,7 +347,7 @@ export function App() {
     <main className="dashboard-shell">
       <section className="topbar">
         <div>
-          <p className="eyebrow">Phase 10</p>
+          <p className="eyebrow">Phase 12</p>
           <h1>Trading Dashboard</h1>
           <p className="lede">
             Live market, replay practice, strategy output, paper execution, and bot controls in one
@@ -433,7 +442,11 @@ export function App() {
             />
             <PracticeStat
               label="Current Candle"
-              value={replay.currentOpenTime ? formatTime(replay.currentOpenTime) : "Waiting"}
+              value={
+                replay.currentOpenTime
+                  ? formatChartTime(replay.currentOpenTime, data.candles?.timeframe ?? activeTimeframe)
+                  : "Waiting"
+              }
             />
             <PracticeStat
               label="Data File"
@@ -476,7 +489,7 @@ export function App() {
         <article className="panel chart-panel">
           <div className="panel-header">
             <div>
-              <h2>1m Candles</h2>
+              <h2>{data.candles?.timeframe ?? activeTimeframe} Candles</h2>
               <p>
                 {data.status?.market.symbol ?? "BTCUSDT"} close, range, and volume
                 {isReplayMode ? " from replay practice data" : ""}
@@ -769,7 +782,16 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-function formatTime(timestamp: number) {
+function formatChartTime(timestamp: number, timeframe: string) {
+  if (timeframe === "4h" || timeframe === "1d") {
+    return new Date(timestamp).toLocaleString([], {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  }
+
   return new Date(timestamp).toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit"
@@ -803,4 +825,8 @@ function trimPath(value: string) {
   const normalized = value.replace(/\\/g, "/");
   const parts = normalized.split("/");
   return parts.slice(-2).join("/");
+}
+
+function preferredTimeframeForStrategy(strategy: BotStrategy | undefined) {
+  return strategy === "momentum-champion" ? "4h" : "1m";
 }

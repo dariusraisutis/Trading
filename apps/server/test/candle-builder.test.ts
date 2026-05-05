@@ -89,4 +89,46 @@ describe("CandleBuilder", () => {
       }
     ]);
   });
+
+  it("keeps 4h candle open until the 4h interval truly ends", () => {
+    const builder = new CandleBuilder();
+    const firstWindow = 1_766_880_000_000;
+
+    builder.ingestTrade({
+      type: "trade",
+      symbol: "BTCUSDT",
+      price: 100,
+      quantity: 1,
+      tradeId: 1,
+      eventTime: firstWindow
+    });
+
+    expect(builder.closeDue(firstWindow + 60_000)).toEqual([
+      {
+        symbol: "BTCUSDT",
+        timeframe: "1m",
+        openTime: firstWindow,
+        closeTime: firstWindow + 59_999,
+        open: 100,
+        high: 100,
+        low: 100,
+        close: 100,
+        volume: 1
+      }
+    ]);
+
+    expect(builder.closeDue(firstWindow + 4 * 60 * 60_000)).toEqual([
+      {
+        symbol: "BTCUSDT",
+        timeframe: "4h",
+        openTime: firstWindow,
+        closeTime: firstWindow + 4 * 60 * 60_000 - 1,
+        open: 100,
+        high: 100,
+        low: 100,
+        close: 100,
+        volume: 1
+      }
+    ]);
+  });
 });

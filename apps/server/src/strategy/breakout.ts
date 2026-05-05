@@ -3,6 +3,7 @@ import type { Strategy, StrategySignal } from "./types.js";
 export function createBreakoutStrategy(period = 20): Strategy {
   return {
     name: "breakout",
+    timeframe: "1m",
     requiredCandles: period + 1,
     evaluate(candles) {
       if (candles.length < period + 1) {

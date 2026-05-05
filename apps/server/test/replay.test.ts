@@ -70,6 +70,7 @@ describe("replay mode", () => {
       marketStore,
       repositories.orders,
       repositories.trades,
+      repositories.positionControls,
       repositories.positions,
       logger
     );
@@ -185,6 +186,7 @@ describe("replay mode", () => {
       marketStore,
       repositories.orders,
       repositories.trades,
+      repositories.positionControls,
       repositories.positions,
       logger
     );
